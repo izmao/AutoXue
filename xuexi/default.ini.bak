@@ -1,4 +1,4 @@
-; default.ini
+﻿; default.ini
 ; Do not Modify!
 
 [capability]
@@ -21,7 +21,7 @@ appactivity = com.alibaba.android.rimet.biz.SplashActivity
 ; ----------------------------------
 platformversion = 5.1.1
 devicename = MI_6
-uuid = 127.0.0.1:62001
+uuid = LGV52210721b07
 ; ----------------------------------
 [api]
 ; Resources URL
