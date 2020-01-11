@@ -178,9 +178,8 @@ class App(Automation):
         self.safe_click(rules["login_submit"])
         try:
             # time.sleep(3)
-            confirm = self.wait.until(EC.presence_of_element_located((
-                By.XPATH, rules["login_confirm"]
-            )))
+            confirm = self.driver.find_element_by_xpath(rules["login_confirm"])
+            time.sleep(1)
             confirm.click()
         except NoSuchElementException as e:
             logger.debug(f'貌似不需要点击同意')
