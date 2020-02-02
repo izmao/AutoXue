@@ -25,6 +25,7 @@ from .unit import Timer, logger, caps, rules, cfg
 from .model import BankQuery
 from .secureRandom import SecureRandom as random
 
+
 class Automation():
     # 初始化 Appium 基本参数
     def __init__(self):
@@ -44,7 +45,7 @@ class Automation():
         }
         logger.info('打开 appium 服务,正在配置...')
         self.driver = webdriver.Remote('http://localhost:4723/wd/hub', self.desired_caps)
-        self.wait = WebDriverWait(self.driver, 15)
+        self.wait = WebDriverWait(self.driver, 20)
         self.size = self.driver.get_window_size()
 
     def connect(self):
@@ -85,6 +86,7 @@ class Automation():
                           self.size['width'] * random.uniform(0.89, 0.98),
                           self.size['height'] * random.uniform(0.75, 0.89), random.uniform(800, 1200))
         logger.debug('向右滑动屏幕')
+
     def swipe_left(self):
         # 向右滑动屏幕
         self.driver.swipe(self.size['width'] * random.uniform(0.89, 0.98),
@@ -93,7 +95,7 @@ class Automation():
                           self.size['height'] * random.uniform(0.75, 0.89), random.uniform(800, 1200))
         logger.debug('向左滑动屏幕')
 
-    def find_element(self, ele:str):
+    def find_element(self, ele: str):
         logger.debug(f'find elements by xpath: {ele}')
         try:
             element = self.driver.find_element_by_xpath(ele)
@@ -102,7 +104,7 @@ class Automation():
             raise e
         return element
 
-    def find_elements(self, ele:str):
+    def find_elements(self, ele: str):
         logger.debug(f'find elements by xpath: {ele}')
         try:
             elements = self.driver.find_elements_by_xpath(ele)
@@ -117,7 +119,7 @@ class Automation():
         self.driver.keyevent(4)
         time.sleep(1)
 
-    def safe_click(self, ele:str):
+    def safe_click(self, ele: str):
         logger.debug(f'safe click {ele}')
         button = self.wait.until(EC.presence_of_element_located((By.XPATH, ele)))
         # button = self.find_element(ele)
@@ -125,8 +127,10 @@ class Automation():
         time.sleep(1)
 
     def __del__(self):
+        logger.info('对象全部del...')
         self.driver.close_app()
         self.driver.quit()
+
 
 
 class App(Automation):
@@ -141,9 +145,10 @@ class App(Automation):
         self.score = defaultdict(tuple)
 
         super().__init__()
-
+        logger.info('自动化初始化程序...')
         self.login_or_not()
         self.driver.wait_activity('com.alibaba.android.rimet.biz.home.activity.HomeActivity', 20, 3)
+
         self.view_score()
         self._read_init()
         self._view_init()
@@ -156,17 +161,17 @@ class App(Automation):
         try:
             home = self.driver.find_element_by_xpath(rules["home_entry"])
             logger.debug(f'Do not have to login, perfect!')
-            return 
+            return
         except NoSuchElementException as e:
             logger.debug(self.driver.current_activity)
             logger.debug(f"Not home page, login first!")
-        
+
         if not self.username or not self.password:
             logger.error(f'未提供有效的username和password')
             logger.info(f'Maybe you need:')
             logger.info(f'\tpython -m xuexi -u "your_username" -p "your_password"')
             raise ValueError('username and password required')
-        
+
         username = self.wait.until(EC.presence_of_element_located((
             By.XPATH, rules["login_username"]
         )))
@@ -185,23 +190,46 @@ class App(Automation):
         except NoSuchElementException as e:
             logger.debug(f'貌似不需要点击同意')
 
-        
     def logout_or_not(self):
         if cfg.getboolean("prefers", "keep_alive"):
             logger.debug("无需自动注销账号")
-            return 
+            return
         self.safe_click(rules["mine_entry"])
         self.safe_click(rules["setting_submit"])
         self.safe_click(rules["logout_submit"])
         self.safe_click(rules["logout_confirm"])
         logger.info("已注销")
 
+    def return_home(self):
+        if self.find_elements(rules['home_entry']):
+            self.driver.find_element_by_xpath(rules["home_entry"]).click()
+            return
+        else:
+            testval = 1
+            while testval:
+                try:
+                    time.sleep(1)
+                    self.driver.find_element_by_xpath(rules["home_entry"]).click()
+                    testval = 0
+                    return
+                except:
+                    try:
+                        time.sleep(1)
+                        try:
+                            self.driver.find_element_by_xpath(rules["return_back"]).click()
+                        except:
+                            logger.info("no found sure")
+                        self.safe_back('back')
+                        logger.info("back")
+                    except:
+                        self.driver.find_element_by_xpath(rules["return_back"]).click()
+                        logger.info("=======")
 
     def view_score(self):
         self.safe_click(rules['score_entry'])
-        titles = ["登录", "阅读文章", "视听学习", "文章学习时长", 
-                "视听学习时长", "每日答题", "每周答题", "专项答题", 
-                "挑战答题", "订阅", "收藏", "分享", "发表观点"]
+        titles = ["登录", "阅读文章", "视听学习", "文章学习时长",
+                  "视听学习时长", "每日答题", "每周答题", "专项答题",
+                  "挑战答题", "订阅", "收藏", "分享", "发表观点", "本地频道"]
         score_list = self.wait.until(EC.presence_of_all_elements_located((By.XPATH, rules['score_list'])))
         # score_list = self.find_elements(rules["score_list"])
         for t, score in zip(titles, score_list):
@@ -209,8 +237,14 @@ class App(Automation):
             self.score[t] = tuple([int(x) for x in re.findall(r'\d+', s)])
 
         # print(self.score)
+        nowscore=0
+        goalscore=0
         for i in self.score:
             logger.info(f'{i}, {self.score[i]}')
+            tempa,tempb = self.score[i]
+            nowscore += tempa
+            goalscore += tempb
+        logger.info("当前" + str(nowscore) + "目标" + str(goalscore))
         self.safe_back('score -> home')
 
     def back_or_not(self, title):
@@ -226,9 +260,9 @@ class App(Automation):
         logger.debug(f'搜索 {content} <exclude = {exclude}>')
         logger.info(f"选项 {options}")
         content = re.sub(r'[\(（]出题单位.*', "", content)
-        if options[-1].startswith("以上") and chr(len(options)+64) not in exclude:
-            logger.info(f'根据经验: {chr(len(options)+64)} 很可能是正确答案')
-            return chr(len(options)+64)
+        if options[-1].startswith("以上") and chr(len(options) + 64) not in exclude:
+            logger.info(f'根据经验: {chr(len(options) + 64)} 很可能是正确答案')
+            return chr(len(options) + 64)
         # url = quote('https://www.baidu.com/s?wd=' + content, safe=string.printable)
         url = quote("https://www.sogou.com/web?query=" + content, safe=string.printable)
         response = requests.get(url, headers=self.headers).text
@@ -237,10 +271,10 @@ class App(Automation):
             count = response.count(option)
             counts.append((count, i))
             logger.info(f'{i}. {option}: {count} 次')
-        counts = sorted(counts, key=lambda x:x[0], reverse=True)
+        counts = sorted(counts, key=lambda x: x[0], reverse=True)
         counts = [x for x in counts if x[1] not in exclude]
         c, i = counts[0]
-        if 0 == c:     
+        if 0 == c:
             # 替换了百度引擎为搜狗引擎，结果全为零的机会应该会大幅降低       
             _, i = random.choice(counts)
             logger.info(f'搜索结果全0，随机一个 {i}')
@@ -269,7 +303,7 @@ class App(Automation):
             elif "单选题" == category:
                 return self._search(content, options, excludes)
             else:
-                logger.debug("题目类型非法")            
+                logger.debug("题目类型非法")
         else:
             if "填空题" == category:
                 dests = re.findall(r'.{0,2}\s+.{0,2}', content)
@@ -312,13 +346,12 @@ class App(Automation):
             else:
                 logger.debug("题目类型非法")
 
-        
     def _update_bank(self, item):
         if not self.bank or not self.bank["answer"]:
             self.query.put(item)
 
-# 挑战答题模块
-# class Challenge(App):
+    # 挑战答题模块
+    # class Challenge(App):
     def _challenge_init(self):
         # super().__init__()
         try:
@@ -329,15 +362,15 @@ class App(Automation):
                 self.challenge_count = 0
             else:
                 self.challenge_count = random.randint(
-                        cfg.getint('prefers', 'challenge_count_min'), 
-                        cfg.getint('prefers', 'challenge_count_max'))
+                    cfg.getint('prefers', 'challenge_count_min'),
+                    cfg.getint('prefers', 'challenge_count_max'))
 
         self.delay_bot = cfg.getint('prefers', 'challenge_delay_min')
         self.delay_top = cfg.getint('prefers', 'challenge_delay_max')
 
     def _challenge_cycle(self, num):
         self.safe_click(rules['challenge_entry'])
-        while num:            
+        while num:
             content = self.wait.until(EC.presence_of_element_located(
                 (By.XPATH, rules['challenge_content']))).get_attribute("name")
             # content = self.find_element(rules["challenge_content"]).get_attribute("name")
@@ -351,23 +384,23 @@ class App(Automation):
             delay_time = random.randint(self.delay_bot, self.delay_top)
             logger.info(f'随机延时 {delay_time} 秒提交答案: {answer}')
             time.sleep(delay_time)
-            option_elements[ord(answer)-65].click()
+            option_elements[ord(answer) - 65].click()
             try:
                 time.sleep(2)
                 wrong = self.driver.find_element_by_xpath(rules['challenge_revival'])
                 logger.debug(f'很遗憾回答错误')
                 self._update_bank({
-                        "category": "单选题",
-                        "content": content,
-                        "options": options,
-                        "answer": "",
-                        "excludes": answer,
-                        "notes": ""
-                    })
+                    "category": "单选题",
+                    "content": content,
+                    "options": options,
+                    "answer": "",
+                    "excludes": answer,
+                    "notes": ""
+                })
                 break
             except:
                 logger.debug(f'回答正确')
-                num -= 1            
+                num -= 1
                 self._update_bank({
                     "category": "单选题",
                     "content": content,
@@ -388,9 +421,9 @@ class App(Automation):
             length_of_options = len(options)
             logger.info(f'<{num}> {content}')
             answer = self._verify(category='单选题', content=content, options=options)
-            final_choose = ((ord(answer)-65)+random.randint(1,length_of_options))%length_of_options
+            final_choose = ((ord(answer) - 65) + random.randint(1, length_of_options)) % length_of_options
             delay_time = random.randint(self.delay_bot, self.delay_top)
-            logger.info(f'随机延时 {delay_time} 秒提交答案: {chr(final_choose+65)}')
+            logger.info(f'随机延时 {delay_time} 秒提交答案: {chr(final_choose + 65)}')
             time.sleep(delay_time)
             option_elements[final_choose].click()
             time.sleep(2)
@@ -403,7 +436,6 @@ class App(Automation):
         self.safe_back('challenge -> quiz')
         return num
 
-
     def _challenge(self):
         logger.info(f'挑战答题 目标 {self.challenge_count} 题, Go!')
         while True:
@@ -412,12 +444,10 @@ class App(Automation):
                 logger.info(f'已成功挑战 {self.challenge_count} 题，正在返回')
                 break
             else:
-                delay_time = random.randint(5,10)
+                delay_time = random.randint(5, 10)
                 logger.info(f'本次挑战 {self.challenge_count - result} 题，{delay_time} 秒后再来一组')
                 time.sleep(delay_time)
                 continue
-
-        
 
     def challenge(self):
         if 0 == self.challenge_count:
@@ -430,17 +460,19 @@ class App(Automation):
         self.safe_back('quiz -> mine')
         self.safe_back('mine -> home')
 
-# 每日答题模块
-# class Daily(App):
+    # 每日答题模块
+    # class Daily(App):
     def _daily_init(self):
         # super().__init__()
         self.g, self.t = 0, 6
         self.wg, self.wt = 0, 6
-        self.xg, self.xt = 0,10
+        self.xg, self.xt = 0, 10
         self.count_of_group = 5
         self.count_of_groupx = 10
         try:
             self.daily_count = cfg.getint('prefers', 'daily_count')
+            self.weekly_count = cfg.getint('prefers', 'weekly_count')
+            self.zhuanxiangy_count = cfg.getint('prefers', 'zhuanxiang_count')
         except:
             self.g, self.t = self.score["每日答题"]
             self.daily_count = self.t - self.g
@@ -463,15 +495,15 @@ class App(Automation):
             submit_anser = self.driver.find_element_by_xpath(rules["daily_submit"])
             submit_anser.click()
         except NoSuchElementException as e:
-            logger.debug("没有可点击的【确定】按钮")
+            logger.info("没有可点击的【确定】按钮")
         time.sleep(3)
         try:
             submit_next = self.driver.find_element_by_xpath(rules["daily_submit_next"])
             submit_next.click()
         except NoSuchElementException as e:
-            logger.debug("没有可点击的【下一题】按钮")
-        #self.safe_click(rules["daily_submit"])
-        time.sleep(random.randint(1,3))
+            logger.info("没有可点击的【下一题】按钮")
+        # self.safe_click(rules["daily_submit"])
+        time.sleep(random.randint(1, 3))
 
     def _view_tips(self):
         content = ""
@@ -485,7 +517,7 @@ class App(Automation):
         try:
             tips = self.wait.until(EC.presence_of_element_located((
                 By.XPATH, rules["daily_tips"]
-            )))     
+            )))
             content = tips.get_attribute("name")
             logger.debug(f'提示 {content}')
         except NoSuchElementException as e:
@@ -495,19 +527,19 @@ class App(Automation):
         try:
             tips_close = self.driver.find_element_by_xpath(rules["daily_tips_close"])
             tips_close.click()
-            
+
         except NoSuchElementException as e:
             logger.debug("没有可点击的【X】按钮")
         time.sleep(2)
         return content
 
-    def _blank_answer_divide(self, ans:str, arr:list):
+    def _blank_answer_divide(self, ans: str, arr: list):
         accu_revr = [x for x in accumulate(arr)]
         print(accu_revr)
-        temp  = list(ans)
+        temp = list(ans)
         for c in accu_revr[-2::-1]:
             temp.insert(c, " ")
-        return "".join(temp)        
+        return "".join(temp)
 
     def _blank(self):
         contents = self.wait.until(EC.presence_of_all_elements_located((By.XPATH, rules["daily_blank_content"])))
@@ -520,7 +552,7 @@ class App(Automation):
             if "" != content_text:
                 content += content_text
             else:
-                length_of_spaces = len(item.find_elements(By.CLASS_NAME, "android.view.View"))-1
+                length_of_spaces = len(item.find_elements(By.CLASS_NAME, "android.view.View")) - 1
                 print(f'空格数 {length_of_spaces}')
                 spaces.append(length_of_spaces)
                 content += " " * (length_of_spaces)
@@ -529,23 +561,23 @@ class App(Automation):
         #                     if x.get_attribute("name") 
         #                     else " "*(len(x.find_elements(By.CLASS_NAME, "android.view.View"))-1)
         #                     for x in contents ])
-        
+
         blank_edits = self.wait.until(EC.presence_of_all_elements_located((By.XPATH, rules["daily_blank_edits"])))
         # blank_edits = self.find_elements(rules["daily_blank_edits"])
         length_of_edits = len(blank_edits)
         logger.info(f'填空题 {content}')
-        answer = self._verify("填空题", content, "") # 
+        answer = self._verify("填空题", content, "")  #
         if not answer:
             words = (''.join(random.sample(string.ascii_letters + string.digits, 8)) for i in range(length_of_edits))
         else:
             words = answer.split(" ")
         logger.debug(f'提交答案 {words}')
-        for k,v in zip(blank_edits, words):
+        for k, v in zip(blank_edits, words):
             # time.sleep(1)
             k.send_keys(v)
 
         self._submit()
-        try:            
+        try:
             wrong_or_not = self.driver.find_element_by_xpath(rules["daily_wrong_or_not"])
             right_answer = self.driver.find_element_by_xpath(rules["daily_answer"]).get_attribute("name")
             answer = re.sub(r'正确答案： ', '', right_answer)
@@ -575,9 +607,9 @@ class App(Automation):
         except:
             logger.debug("填空题回答正确")
 
-        
     def _radio(self):
-        content = self.wait.until(EC.presence_of_element_located((By.XPATH, rules["daily_content"]))).get_attribute("name")
+        content = self.wait.until(EC.presence_of_element_located((By.XPATH, rules["daily_content"]))).get_attribute(
+            "name")
         # content = self.find_element(rules["daily_content"]).get_attribute("name")
         option_elements = self.wait.until(EC.presence_of_all_elements_located((By.XPATH, rules["daily_options"])))
         # option_elements = self.driver.find_elements(rules["daily_options"])
@@ -591,7 +623,7 @@ class App(Automation):
         option_elements[choose_index].click()
         # 提交答案
         self._submit()
-        try:            
+        try:
             wrong_or_not = self.driver.find_element_by_xpath(rules["daily_wrong_or_not"])
             right_answer = self.driver.find_element_by_xpath(rules["daily_answer"]).get_attribute("name")
             right_answer = re.sub(r'正确答案： ', '', right_answer)
@@ -618,7 +650,8 @@ class App(Automation):
             })
 
     def _check(self):
-        content = self.wait.until(EC.presence_of_element_located((By.XPATH, rules["daily_content"]))).get_attribute("name")
+        content = self.wait.until(EC.presence_of_element_located((By.XPATH, rules["daily_content"]))).get_attribute(
+            "name")
         # content = self.find_element(rules["daily_content"]).get_attribute("name")
         option_elements = self.wait.until(EC.presence_of_all_elements_located((By.XPATH, rules["daily_options"])))
         # option_elements = self.driver.find_elements(rules["daily_options"])
@@ -663,7 +696,7 @@ class App(Automation):
 
     def _dispath(self):
         for i in range(self.count_of_group):
-            logger.debug(f'每日答题 第 {4-i} 题')
+            logger.debug(f'每日答题 第 {4 - i} 题')
             try:
                 category = self.driver.find_element_by_xpath(rules["daily_category"]).get_attribute("name")
             except NoSuchElementException as e:
@@ -677,9 +710,10 @@ class App(Automation):
                 self._check()
             else:
                 logger.error(f"未知的题目类型: {category}")
+
     def _dispathx(self):
         for i in range(self.count_of_groupx):
-            logger.debug(f'每日答题 第 {9-i} 题')
+            logger.info(f'专项答题 第 {9 - i} 题')
             time.sleep(3)
             try:
                 category = self.driver.find_element_by_xpath(rules["zhuanxiang_category"]).get_attribute("name")
@@ -703,8 +737,9 @@ class App(Automation):
             num -= 1
             logger.info(f'每日答题 第 {num}# 组')
             self._dispath()
-            score = self.wait.until(EC.presence_of_element_located((By.XPATH, rules["daily_score"]))).get_attribute("name")
-            #score = 0
+            score = self.wait.until(EC.presence_of_element_located((By.XPATH, rules["daily_score"]))).get_attribute(
+                "name")
+            # score = 0
             try:
                 score = int(score)
             except:
@@ -738,22 +773,28 @@ class App(Automation):
 
     def _weekly(self, num):
         self.safe_click(rules["weekly_entry"])
-        logger.info(f'等待自行选择题目')
+        try:
+            weekly_begin = self.driver.find_element_by_xpath(rules["weekly_list"])
+            weekly_begin.click()
+        except NoSuchElementException as e:
+            logger.debug("没有可答题目")
+            return
         element_1 = self.wait.until(EC.presence_of_element_located((By.XPATH, rules["daily_tips_open"])))
         logger.info(element_1)
         while num:
             num -= 1
             logger.info(f'每周答题 第 {num}# 组')
             self._dispath()
-            #需要去注释正式运用的话
+            # 需要去注释正式运用的话
             try:
                 submit_next = self.driver.find_element_by_xpath(rules["daily_submit_finish"])
                 submit_next.click()
             except NoSuchElementException as e:
                 logger.debug("没有可点击的【完成】按钮")
-            score = self.wait.until(EC.presence_of_element_located((By.XPATH, rules["daily_score"]))).get_attribute("name")
+            score = self.wait.until(EC.presence_of_element_located((By.XPATH, rules["daily_score"]))).get_attribute(
+                "name")
             logger.debug(score)
-            #score = 0
+            # score = 0
             try:
                 score = int(score)
             except:
@@ -765,28 +806,47 @@ class App(Automation):
             else:
                 delay = random.randint(self.delay_group_bot, self.delay_group_top)
                 logger.info(f'每周答题未完成 <{self.g} / {self.t}> {delay} 秒后再来一组')
-                #self.safe_click(rules['weekly_back'])
-                #element_1 = self.wait.until(EC.presence_of_element_located((By.XPATH, rules["daily_tips_open"])))
-                #num = 5
-                #time.sleep(delay)
-                #logger.info(element_1)
+                # self.safe_click(rules['weekly_back'])
+                # element_1 = self.wait.until(EC.presence_of_element_located((By.XPATH, rules["daily_tips_open"])))
+                # num = 5
+                # time.sleep(delay)
+                # logger.info(element_1)
                 break
         else:
             logger.debug(f'今日循环结束 <{self.g} / {self.t}>')
-        self.safe_back('daily -> quiz')
+        #self.safe_back('list -> quiz')
+
     def weekly(self):
-        if 0 < self.weekly_count:
+        if 0 >= self.wt:
             logger.info(f'每周答题已学习，无需重复答题')
             return
-        logger.info(f'每周答题测试')
+        logger.info(f'每周答题开始')
         self.safe_click(rules['mine_entry'])
         self.safe_click(rules['quiz_entry'])
         time.sleep(3)
         self._weekly(5)
-        self.safe_back('quiz -> mine')
-        self.safe_back('mine -> home')
+        self.return_home()
+
     def _zhuanxiang(self, num):
         self.safe_click(rules["zhuanxiang_entry"])
+        for num in range(1,11):
+            logger.info(num)
+            try:
+                zhuanxiang_begin = self.driver.find_element_by_xpath(rules["zhuanxiang_list"])
+                # zhuanxiang_begin = self.wait.until(EC.presence_of_all_elements_located((By.XPATH, rules['zhuanxiang_list'])))
+                logger.info(zhuanxiang_begin)
+                logger.info("click")
+                zhuanxiang_begin.click()
+                break
+            except NoSuchElementException as e:
+                time.sleep(1)
+                logger.info("swipe up")
+                self.swipe_up()
+                if num == 10:
+                    logger.info("没有可答题目")
+                    return
+
+
         logger.info(f'等待自行选择题目')
         element_1 = self.wait.until(EC.presence_of_element_located((By.XPATH, rules["daily_tips_open"])))
         logger.info(element_1)
@@ -794,19 +854,20 @@ class App(Automation):
             num -= 1
             logger.info(f'专项答题 第 {num}# 组')
             self._dispathx()
-            #需要去注释正式运用的话
+            # 需要去注释正式运用的话
             try:
                 submit_next = self.driver.find_element_by_xpath(rules["daily_submit_finish"])
                 submit_next.click()
             except NoSuchElementException as e:
                 logger.info(f'无确定按钮')
             try:
-                score = self.wait.until(EC.presence_of_element_located((By.XPATH, rules["daily_score"]))).get_attribute("name")
+                score = self.wait.until(EC.presence_of_element_located((By.XPATH, rules["daily_score"]))).get_attribute(
+                    "name")
             except NoSuchElementException as e:
                 logger.info(f'获取分数失败')
                 score = 0
             logger.debug(score)
-            #score = 0
+            # score = 0
             try:
                 score = int(score)
             except:
@@ -818,17 +879,19 @@ class App(Automation):
             else:
                 delay = random.randint(self.delay_group_bot, self.delay_group_top)
                 logger.info(f'专项答题未完成 <{self.g} / {self.t}> {delay} 秒后再来一组')
-                self.safe_click(rules['weekly_back'])
-                element_1 = self.wait.until(EC.presence_of_element_located((By.XPATH, rules["daily_tips_open"])))
-                num = 10
-                time.sleep(delay)
-                logger.info(element_1)
+                #    self.safe_click(rules['weekly_back'])
+                #    element_1 = self.wait.until(EC.presence_of_element_located((By.XPATH, rules["daily_tips_open"])))
+                #    num = 10
+                #    time.sleep(delay)
+                #   logger.info(element_1)
                 continue
         else:
             logger.debug(f'今日循环结束 <{self.g} / {self.t}>')
-        self.safe_back('daily -> quiz')
+
+        #self.safe_back('daily -> quiz')
+
     def zhuanxiang(self):
-        if 0 < self.zhuanxiang_count:
+        if 0 >= self.zhuanxiang_count:
             logger.info(f'专项答题已答过，无需重复答题')
             return
         logger.info(f'专项答题测试')
@@ -836,11 +899,10 @@ class App(Automation):
         self.safe_click(rules['quiz_entry'])
         time.sleep(3)
         self._zhuanxiang(10)
-        self.safe_back('quiz -> mine')
-        self.safe_back('mine -> home')
+        self.return_home()
 
-# 新闻阅读模块
-# class Read(App):
+    # 新闻阅读模块
+    # class Read(App):
     def _read_init(self):
         # super().__init__()
         self.read_time = 720
@@ -857,8 +919,8 @@ class App(Automation):
                 self.read_delay = random.randint(45, 60)
             else:
                 self.read_count = random.randint(
-                        cfg.getint('prefers', 'article_count_min'), 
-                        cfg.getint('prefers', 'article_count_max'))
+                    cfg.getint('prefers', 'article_count_min'),
+                    cfg.getint('prefers', 'article_count_max'))
                 self.read_delay = self.read_time // self.read_count + 1
 
     def _star_once(self):
@@ -913,7 +975,7 @@ class App(Automation):
 
     def _read(self, num, ssc_count):
         logger.info(f'预计阅读新闻 {num} 则')
-        while num > 0: # or ssc_count:
+        while num > 0:  # or ssc_count:
             try:
                 articles = self.driver.find_elements_by_xpath(rules['article_list'])
             except:
@@ -932,7 +994,7 @@ class App(Automation):
                 article.click()
                 num -= 1
                 logger.info(f'<{num}> 当前篇目 {title}')
-                article_delay = random.randint(self.read_delay, self.read_delay+min(10, self.read_count))
+                article_delay = random.randint(self.read_delay, self.read_delay + min(10, self.read_count))
                 logger.info(f'阅读时间估计 {article_delay} 秒...')
                 while article_delay > 0:
                     if article_delay < 20:
@@ -960,7 +1022,7 @@ class App(Automation):
                     break
             else:
                 self.swipe_up()
-    
+
     def read(self):
         if 0 == self.read_count:
             logger.info(f'新闻阅读已达成，无需重复阅读')
@@ -981,11 +1043,11 @@ class App(Automation):
             else:
                 logger.debug(f'未找到 {self.volumn_title}，左滑一屏')
                 self.driver.scroll(vol, first_vol, duration=500)
-        
+
         self._read(self.read_count, self.star_share_comments_count)
 
-# 视听学习模块        
-# class View(App): 
+    # 视听学习模块
+    # class View(App):
     def _view_init(self):
         # super().__init__()
         self.has_bgm = cfg.get("prefers", "radio_switch")
@@ -996,7 +1058,7 @@ class App(Automation):
         self.radio_chanel = cfg.get("prefers", "radio_chanel")
         try:
             self.video_count = cfg.getint("prefers", "video_count")
-            self.view_delay = 15
+            self.view_delay = 20
         except:
             g, t = self.score["视听学习"]
             if t == g:
@@ -1004,8 +1066,8 @@ class App(Automation):
                 self.view_delay = random.randint(15, 30)
             else:
                 self.video_count = random.randint(
-                        cfg.getint('prefers', 'video_count_min'), 
-                        cfg.getint('prefers', 'video_count_max'))
+                    cfg.getint('prefers', 'video_count_min'),
+                    cfg.getint('prefers', 'video_count_max'))
                 self.view_delay = self.view_time // self.video_count + 1
 
     def music(self):
@@ -1017,12 +1079,12 @@ class App(Automation):
         else:
             logger.debug(f'广播开关 默认')
             g, t = self.score["视听学习时长"]
-            if g ==  t:
+            if g == t:
                 logger.debug(f'视听学习时长积分已达成，无需重复收听')
                 return
             else:
                 self._music()
-    
+
     def _music(self):
         logger.debug(f'正在打开《{self.radio_chanel}》...')
         self.safe_click('//*[@resource-id="cn.xuexi.android:id/home_bottom_tab_button_mine"]')
@@ -1036,7 +1098,7 @@ class App(Automation):
             return
         logger.info("开始浏览百灵视频...")
         self.safe_click(rules['bailing_enter'])
-        self.safe_click(rules['bailing_enter']) # 再点一次刷新短视频列表
+        self.safe_click(rules['bailing_enter'])  # 再点一次刷新短视频列表
         self.safe_click(rules['video_first'])
         logger.info(f'预计观看视频 {video_count} 则')
         while video_count:
@@ -1052,4 +1114,36 @@ class App(Automation):
             self.safe_click(rules['home_entry'])
 
     def watch(self):
+        # readytouse = self.driver.find_element_by_xpath(rules["home_entry"])
+        # logger.info(readytouse)
+        # while not readytouse:
+        #    self.safe_back('没有回到主界面')
+        #    readytouse = self.driver.find_element_by_xpath(rules["home_entry"])
+        self.safe_click('//*[@text="推荐"]')
         self._watch(self.video_count)
+
+    def local(self):
+        g, t = self.score["本地频道"]
+        if g == t:
+            logger.info(f'本地频道积分已达成，无需重复查看')
+            return
+        else:
+            self._local()
+
+    def _local(self):
+        logger.debug(f'正在打开学习本地频道...')
+        self.safe_click('//*[@resource-id="cn.xuexi.android:id/home_bottom_tab_button_work"]')
+        self.safe_click('//*[@text="北京"]')
+        self.safe_click(f'//*[@text="北京学习平台"]')
+        lt = time.localtime()
+        st = time.strftime("%Y-%m-%d", lt)
+        hecheng = '//*[@text="' + st + '"]'
+        self.safe_click(hecheng)  # 点击今日的新闻
+        #self.safe_click(rules['article_kaleidoscope'])
+        #delay = random.randint(5, 15)
+        #logger.info(f"在本地学习平台驻足 {delay} 秒")
+        #time.sleep(delay)
+        logger.info(f'本地频道完毕，正在返回...')
+        self.return_home()
+
+
